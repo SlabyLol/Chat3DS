@@ -1,0 +1,89 @@
+name: Build 3DS Homebrew
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:   # Manuell auslösbar
+
+jobs:
+  build:
+    name: Compile 3DS-Chat.3dsx
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Code auschecken ───────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. devkitPro / devkitARM installieren ───────────────────────────────
+      - name: Install devkitPro pacman keyring
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wget sudo
+          wget https://apt.devkitpro.org/install-devkitpro-pacman
+          chmod +x ./install-devkitpro-pacman
+          sudo ./install-devkitpro-pacman
+          echo "DEVKITPRO=/opt/devkitpro" >> $GITHUB_ENV
+          echo "DEVKITARM=/opt/devkitpro/devkitARM" >> $GITHUB_ENV
+          echo "/opt/devkitpro/tools/bin" >> $GITHUB_PATH
+
+      # ── 3. 3DS-Bibliotheken installieren ────────────────────────────────────
+      - name: Install 3DS toolchain and libraries
+        run: |
+          sudo dkp-pacman -Sy --noconfirm \
+            3ds-dev            \
+            devkitARM          \
+            libctru            \
+            citro2d            \
+            citro3d
+
+      # ── 4. Projekt bauen ────────────────────────────────────────────────────
+      - name: Build 3DS-Chat
+        run: |
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
+          export PATH=$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH
+          make -j$(nproc)
+
+      # ── 5. Artefakte hochladen ───────────────────────────────────────────────
+      - name: Upload .3dsx artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3DS-Chat
+          path: |
+            3ds-chat.3dsx
+            3ds-chat.smdh
+          retention-days: 30
+
+      # ── 6. Release erstellen (nur bei Tag) ───────────────────────────────────
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            3ds-chat.3dsx
+            3ds-chat.smdh
+          body: |
+            ## 3DS-Chat ${{ github.ref_name }}
+
+            ### Installation
+            1. `.3dsx` Datei in `/3ds/3DS-Chat/` auf der SD-Karte kopieren
+            2. Homebrew Launcher starten
+            3. App auswählen und starten
+
+            ### Bedienung
+            - **HOST**: Warte auf Verbindung, teile deine IP
+            - **JOIN**: Gib die IP des Hosts ein
+            - **A**: Nachricht schreiben / Aktion
+            - **B**: Trennen / Zurück
+            - **B im Menü**: Passwort an/aus
+            - **D-Pad ↑↓**: Scrollen im Chat
+            - **START**: Beenden
+
+            ### Anforderungen
+            - 3DS mit Homebrew Launcher (z.B. Luma3DS)
+            - WLAN-Verbindung (lokales Netz oder gleicher Router)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
