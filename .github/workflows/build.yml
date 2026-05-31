@@ -17,26 +17,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. devkitPro pacman via .deb von GitHub Releases installieren ────────
-      #    (apt.devkitpro.org ist durch Cloudflare WAF für wget gesperrt,
-      #     daher direkt von github.com/devkitPro/pacman/releases laden)
-      - name: Install devkitPro pacman (.deb from GitHub Releases)
+      # ── 2. devkitPro pacman installieren ────────────────────────────────────
+      #    Cloudflare blockiert Standard-wget, aber der User-Agent "dkp-apt"
+      #    ist explizit von devkitPro dokumentiert und wird durchgelassen.
+      - name: Install devkitPro pacman
         run: |
-          # Neueste .deb direkt von GitHub laden – kein Cloudflare-Problem
-          wget -q \
-            "https://github.com/devkitPro/pacman/releases/download/v6.0.2/devkitpro-pacman.amd64.deb" \
-            -O /tmp/dkp-pacman.deb
+          wget -U "dkp-apt" \
+            https://apt.devkitpro.org/install-devkitpro-pacman \
+            -O /tmp/install-devkitpro-pacman
+          chmod +x /tmp/install-devkitpro-pacman
+          sudo /tmp/install-devkitpro-pacman
 
-          sudo dpkg -i /tmp/dkp-pacman.deb || true
-          # dpkg hinterlässt ggf. fehlende Abhängigkeiten – beheben:
-          sudo apt-get install -f -y
+          echo "DEVKITPRO=/opt/devkitpro"            >> $GITHUB_ENV
+          echo "DEVKITARM=/opt/devkitpro/devkitARM"  >> $GITHUB_ENV
+          echo "/opt/devkitpro/tools/bin"             >> $GITHUB_PATH
 
-          # Umgebung setzen
-          echo "DEVKITPRO=/opt/devkitpro"         >> $GITHUB_ENV
-          echo "DEVKITARM=/opt/devkitpro/devkitARM" >> $GITHUB_ENV
-          echo "/opt/devkitpro/tools/bin"           >> $GITHUB_PATH
-
-      # ── 3. Paketdatenbank aktualisieren & 3DS-Bibliotheken installieren ──────
+      # ── 3. 3DS-Bibliotheken installieren ────────────────────────────────────
       - name: Install 3DS toolchain and libraries
         run: |
           sudo dkp-pacman -Sy --noconfirm
