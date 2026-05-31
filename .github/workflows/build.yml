@@ -5,7 +5,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:   # Manuell auslösbar
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,26 +17,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. devkitPro / devkitARM installieren ───────────────────────────────
-      - name: Install devkitPro pacman keyring
+      # ── 2. devkitPro pacman via .deb von GitHub Releases installieren ────────
+      #    (apt.devkitpro.org ist durch Cloudflare WAF für wget gesperrt,
+      #     daher direkt von github.com/devkitPro/pacman/releases laden)
+      - name: Install devkitPro pacman (.deb from GitHub Releases)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y wget sudo
-          wget https://apt.devkitpro.org/install-devkitpro-pacman
-          chmod +x ./install-devkitpro-pacman
-          sudo ./install-devkitpro-pacman
-          echo "DEVKITPRO=/opt/devkitpro" >> $GITHUB_ENV
-          echo "DEVKITARM=/opt/devkitpro/devkitARM" >> $GITHUB_ENV
-          echo "/opt/devkitpro/tools/bin" >> $GITHUB_PATH
+          # Neueste .deb direkt von GitHub laden – kein Cloudflare-Problem
+          wget -q \
+            "https://github.com/devkitPro/pacman/releases/download/v6.0.2/devkitpro-pacman.amd64.deb" \
+            -O /tmp/dkp-pacman.deb
 
-      # ── 3. 3DS-Bibliotheken installieren ────────────────────────────────────
+          sudo dpkg -i /tmp/dkp-pacman.deb || true
+          # dpkg hinterlässt ggf. fehlende Abhängigkeiten – beheben:
+          sudo apt-get install -f -y
+
+          # Umgebung setzen
+          echo "DEVKITPRO=/opt/devkitpro"         >> $GITHUB_ENV
+          echo "DEVKITARM=/opt/devkitpro/devkitARM" >> $GITHUB_ENV
+          echo "/opt/devkitpro/tools/bin"           >> $GITHUB_PATH
+
+      # ── 3. Paketdatenbank aktualisieren & 3DS-Bibliotheken installieren ──────
       - name: Install 3DS toolchain and libraries
         run: |
-          sudo dkp-pacman -Sy --noconfirm \
-            3ds-dev            \
-            devkitARM          \
-            libctru            \
-            citro2d            \
+          sudo dkp-pacman -Sy --noconfirm
+          sudo dkp-pacman -S --noconfirm \
+            3ds-dev \
+            devkitARM \
+            libctru \
+            citro2d \
             citro3d
 
       # ── 4. Projekt bauen ────────────────────────────────────────────────────
@@ -69,21 +77,16 @@ jobs:
             ## 3DS-Chat ${{ github.ref_name }}
 
             ### Installation
-            1. `.3dsx` Datei in `/3ds/3DS-Chat/` auf der SD-Karte kopieren
-            2. Homebrew Launcher starten
-            3. App auswählen und starten
+            1. `.3dsx` in `/3ds/3DS-Chat/` auf der SD-Karte kopieren
+            2. Homebrew Launcher starten → App auswählen
 
-            ### Bedienung
-            - **HOST**: Warte auf Verbindung, teile deine IP
-            - **JOIN**: Gib die IP des Hosts ein
-            - **A**: Nachricht schreiben / Aktion
-            - **B**: Trennen / Zurück
-            - **B im Menü**: Passwort an/aus
-            - **D-Pad ↑↓**: Scrollen im Chat
-            - **START**: Beenden
-
-            ### Anforderungen
-            - 3DS mit Homebrew Launcher (z.B. Luma3DS)
-            - WLAN-Verbindung (lokales Netz oder gleicher Router)
+            ### Steuerung
+            | Taste | Aktion |
+            |-------|--------|
+            | D-Pad Links/Rechts | HOST / JOIN wählen |
+            | **A** | Bestätigen / Nachricht schreiben |
+            | **B** | Passwort-Schutz an/aus (Menü) / Trennen (Chat) |
+            | **D-Pad ↑↓** | Chat scrollen |
+            | **START** | Beenden / Hauptmenü |
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
