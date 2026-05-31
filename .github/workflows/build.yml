@@ -12,38 +12,21 @@ jobs:
     name: Compile 3DS-Chat.3dsx
     runs-on: ubuntu-latest
 
+    # Offizielles devkitPro Docker-Image – kein apt.devkitpro.org nötig!
+    # Enthält devkitARM, libctru, citro2d, citro3d bereits vorinstalliert.
+    container:
+      image: devkitpro/devkitarm:latest
+
     steps:
-      # ── 1. Code auschecken ───────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. devkitPro pacman installieren ────────────────────────────────────
-      #    Cloudflare blockiert Standard-wget, aber der User-Agent "dkp-apt"
-      #    ist explizit von devkitPro dokumentiert und wird durchgelassen.
-      - name: Install devkitPro pacman
+      # citro2d/citro3d nachinstallieren falls nicht im Base-Image
+      - name: Install citro2d and citro3d
         run: |
-          wget -U "dkp-apt" \
-            https://apt.devkitpro.org/install-devkitpro-pacman \
-            -O /tmp/install-devkitpro-pacman
-          chmod +x /tmp/install-devkitpro-pacman
-          sudo /tmp/install-devkitpro-pacman
+          dkp-pacman -Sy --noconfirm
+          dkp-pacman -S --noconfirm 3ds-dev citro2d citro3d || true
 
-          echo "DEVKITPRO=/opt/devkitpro"            >> $GITHUB_ENV
-          echo "DEVKITARM=/opt/devkitpro/devkitARM"  >> $GITHUB_ENV
-          echo "/opt/devkitpro/tools/bin"             >> $GITHUB_PATH
-
-      # ── 3. 3DS-Bibliotheken installieren ────────────────────────────────────
-      - name: Install 3DS toolchain and libraries
-        run: |
-          sudo dkp-pacman -Sy --noconfirm
-          sudo dkp-pacman -S --noconfirm \
-            3ds-dev \
-            devkitARM \
-            libctru \
-            citro2d \
-            citro3d
-
-      # ── 4. Projekt bauen ────────────────────────────────────────────────────
       - name: Build 3DS-Chat
         run: |
           export DEVKITPRO=/opt/devkitpro
@@ -51,7 +34,6 @@ jobs:
           export PATH=$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH
           make -j$(nproc)
 
-      # ── 5. Artefakte hochladen ───────────────────────────────────────────────
       - name: Upload .3dsx artifact
         uses: actions/upload-artifact@v4
         with:
@@ -61,7 +43,6 @@ jobs:
             3ds-chat.smdh
           retention-days: 30
 
-      # ── 6. Release erstellen (nur bei Tag) ───────────────────────────────────
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -81,7 +62,7 @@ jobs:
             |-------|--------|
             | D-Pad Links/Rechts | HOST / JOIN wählen |
             | **A** | Bestätigen / Nachricht schreiben |
-            | **B** | Passwort-Schutz an/aus (Menü) / Trennen (Chat) |
+            | **B** | Passwort an/aus (Menü) / Trennen (Chat) |
             | **D-Pad ↑↓** | Chat scrollen |
             | **START** | Beenden / Hauptmenü |
         env:
